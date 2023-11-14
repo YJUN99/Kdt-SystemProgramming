@@ -23,6 +23,20 @@ int create_input()
     const char *name = "input";
 
     printf("여기서 input 프로세스를 생성합니다.\n");
+    switch(systemPid = fork()){
+        case -1:
+            perror("input fork failed\n");
+            break;
+        case 0:
+            if(prctl(PR_SET_NAME, (unsigned long) name) < 0){
+                perror("input prctl failed\n");
+                exit(1);
+            }
+            input();
+            break;
+        default:
+            break;
+    }
 
     return 0;
 }
