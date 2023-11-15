@@ -13,13 +13,13 @@ OBJS = main.o system_server.o ui.o web_server.o input.o
 
 
 $(TARGET): $(OBJS)
-	$(CC) -o $@ $(OBJS)
+	$(CC) -o $@ $(OBJS) -lrt
 
 main.o: main.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ main.c
 
 system_server.o: $(SYSTEM)/system_server.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $(SYSTEM)/system_server.c
+	$(CC) $(CFLAGS) -c -o $@ $(SYSTEM)/system_server.c -lrt
 
 ui.o: $(UI)/gui.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $(UI)/gui.c
