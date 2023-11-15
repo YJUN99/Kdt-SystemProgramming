@@ -16,7 +16,7 @@ int create_gui()
             break;
         case 0:
             printf("나 GUI 프로세스!\n");
-            if(execl("/usr/bin/google-chrome-stable", "/usr/bin/google-chrome-stable","https://localhost:8282", NULL)){
+            if(execl("/usr/bin/google-chrome-stable", "/usr/bin/google-chrome-stable","http://localhost:8282", NULL)){
                 printf("exec실패\n");
             }
             break;
