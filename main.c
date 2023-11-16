@@ -25,10 +25,7 @@ int main()
 
     int sigCnt;
     sigset_t blockMask, emptyMask;
-    /*
-        여기서 SIGCHLD 시그널 등록
-        signal(SIGCHLD,sigcldHandler); // 자식 프로세그 시그널 생성
-    */ 
+
     struct sigaction sa;
     memset(&sa,0,sizeof(sa));
     sa.sa_handler = sigcldHandler;

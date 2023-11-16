@@ -1,6 +1,7 @@
 TARGET = toy_project
 
 CC = gcc
+LIB = -lpthread -lrt
 CFLAGS= -I$(SYSTEM) -I$(UI) -I$(WEB_SERVER)
 
 SYSTEM = ./system
@@ -13,13 +14,13 @@ OBJS = main.o system_server.o ui.o web_server.o input.o
 
 
 $(TARGET): $(OBJS)
-	$(CC) -o $@ $(OBJS) -lrt
+	$(CC) -o $@ $(OBJS) $(LIB)
 
 main.o: main.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ main.c
 
 system_server.o: $(SYSTEM)/system_server.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $(SYSTEM)/system_server.c -lrt
+	$(CC) $(CFLAGS) -c -o $@ $(SYSTEM)/system_server.c
 
 ui.o: $(UI)/gui.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $(UI)/gui.c

@@ -1,20 +1,24 @@
-#include <stdio.h>
+#include <assert.h>
+#include <pthread.h>
 #include <sys/prctl.h>
-
-// signal handler를 위한 헤더파일
 #include <execinfo.h>
-#include <signal.h> // signal action 을 위한 헤더
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h> // signal action 을 위한 헤더
+#include <signal.h>
 #include <ucontext.h>
+#include <sys/wait.h>
+#include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 #include <system_server.h>
 #include <gui.h>
 #include <input.h>
 #include <web_server.h>
 #include <execinfo.h>
+
+#define TOY_TOK_BUFSIZE 64
+#define TOY_TOK_DELIM " \t\r\n\a"
 
 typedef struct _sig_ucontext {
     unsigned long uc_flags;
@@ -59,22 +63,207 @@ void segfault_handler(int sig_num, siginfo_t * info, void * ucontext) {
   exit(EXIT_FAILURE);
 }
 
+/*
+ *  sensor thread
+ */
+void *sensor_thread(void* arg)
+{
+    char *s = arg;
+
+    printf("%s", s);
+
+    while (1) {
+        posix_sleep_ms(5000);
+    }
+
+    return 0;
+}
+
+/*
+ *  command thread
+ */
+
+int toy_send(char **args);
+int toy_shell(char **args);
+int toy_exit(char **args);
+
+char *builtin_str[] = {
+    "send",
+    "sh",
+    "exit"
+};
+
+int (*builtin_func[]) (char **) = {
+    &toy_send,
+    &toy_shell,
+    &toy_exit
+};
+
+int toy_num_builtins()
+{
+    return sizeof(builtin_str) / sizeof(char *);
+}
+
+int toy_send(char **args)
+{
+    printf("send message: %s\n", args[1]);
+
+    return 1;
+}
+
+int toy_exit(char **args)
+{
+    return 0;
+}
+
+int toy_shell(char **args)
+{
+    pid_t pid;
+    int status;
+
+    pid = fork();
+    if (pid == 0) {
+        if (execvp(args[0], args) == -1) {
+            perror("toy");
+        }
+        exit(EXIT_FAILURE);
+    } else if (pid < 0) {
+        perror("toy");
+    } else
+{
+        do
+        {
+            waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+
+    return 1;
+}
+
+int toy_execute(char **args)
+{
+    int i;
+
+    if (args[0] == NULL) {
+        return 1;
+    }
+
+    for (i = 0; i < toy_num_builtins(); i++) {
+        if (strcmp(args[0], builtin_str[i]) == 0) {
+            return (*builtin_func[i])(args);
+        }
+    }
+
+    return 1;
+}
+
+char *toy_read_line(void)
+{
+    char *line = NULL;
+    ssize_t bufsize = 0;
+
+    if (getline(&line, &bufsize, stdin) == -1) {
+        if (feof(stdin)) {
+            exit(EXIT_SUCCESS);
+        } else {
+            perror(": getline\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    return line;
+}
+
+char **toy_split_line(char *line)
+{
+    int bufsize = TOY_TOK_BUFSIZE, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char *));
+    char *token, **tokens_backup;
+
+    if (!tokens) {
+        fprintf(stderr, "toy: allocation error\n");
+        exit(EXIT_FAILURE);
+    }
+
+    token = strtok(line, TOY_TOK_DELIM);
+    while (token != NULL) {
+        tokens[position] = token;
+        position++;
+
+        if (position >= bufsize) {
+            bufsize += TOY_TOK_BUFSIZE;
+            tokens_backup = tokens;
+            tokens = realloc(tokens, bufsize * sizeof(char *));
+            if (!tokens) {
+                free(tokens_backup);
+                fprintf(stderr, "toy: allocation error\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        token = strtok(NULL, TOY_TOK_DELIM);
+    }
+    tokens[position] = NULL;
+    return tokens;
+}
+
+void toy_loop(void)
+{
+    char *line;
+    char **args;
+    int status;
+
+    do {
+        printf("TOY>");
+        line = toy_read_line();
+        args = toy_split_line(line);
+        status = toy_execute(args);
+
+        free(line);
+        free(args);
+    } while (status);
+}
+
+void *command_thread(void* arg)
+{
+    char *s = arg;
+
+    printf("%s", s);
+
+    toy_loop();
+
+    return 0;
+}
+
 int input()
 {
-    printf("나 input 프로세스!\n");
-    /*
-        여기서 SEGV 시그널 등록
-    */
+    int retcode;
     struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
+    pthread_t command_thread_tid, sensor_thread_tid;
+
+    printf("나 input 프로세스!\n");
+
+    memset(&sa, 0, sizeof(sigaction));
+    sigemptyset(&sa.sa_mask);
+
+    sa.sa_flags = SA_RESTART | SA_SIGINFO;
     sa.sa_sigaction = segfault_handler;
-    sa.sa_flags = SA_SIGINFO;
-    sigaction(SIGSEGV,&sa, NULL);
-    
+
+    sigaction(SIGSEGV, &sa, NULL); /* ignore whether it works or not */
+
+   /* 여기서 스레드를 생성한다. */
+    if((retcode = pthread_create(&command_thread_tid , NULL , command_thread, NULL)) == -1)
+        perror("input.c th_command\n");
+    if((retcode = pthread_create(&sensor_thread_tid , NULL , sensor_thread, NULL)) == -1)
+        perror("input.c th_sensor\n");
+
+
+
     while (1) {
         sleep(1);
     }
-
+    pthread_detach(command_thread_tid);
+    pthread_detach(sensor_thread_tid);
+    
     return 0;
 }
 
@@ -84,19 +273,19 @@ int create_input()
     const char *name = "input";
 
     printf("여기서 input 프로세스를 생성합니다.\n");
-    switch(systemPid = fork()){
-        case -1:
-            perror("input fork failed\n");
-            break;
-        case 0:
-            if(prctl(PR_SET_NAME, (unsigned long) name) < 0){
-                perror("input prctl failed\n");
-                exit(1);
-            }
-            input();
-            break;
-        default:
-            break;
+
+    /* fork 를 이용하세요 */
+    switch (systemPid = fork()) {
+    case -1:
+        printf("fork failed\n");
+    case 0:
+        /* 프로세스 이름 변경 */
+        if (prctl(PR_SET_NAME, (unsigned long) name) < 0)
+            perror("prctl()");
+        input();
+        break;
+    default:
+        break;
     }
 
     return 0;

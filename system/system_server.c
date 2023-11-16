@@ -12,6 +12,11 @@
 #include <input.h>
 #include <web_server.h>
 
+/* Threads header */
+#include <assert.h>
+#include <pthread.h>
+
+
 #define MILLISEC_PER_SECOND 1000
 #define NANOSEC_PER_USEC    1000
 #define USEC_PER_MILLISEC   1000
@@ -30,7 +35,35 @@ int posix_sleep_ms(unsigned int timeout_ms)
 }
 
 void timer_handler(int signo){
-    printf("timer 만료\n");
+    toy_timer++;
+    //printf("timer 만료\n");
+}
+
+
+void *watchdog_thread(void *arg){
+    printf("watch dog thread\n");
+    while(1){
+        posix_sleep_ms(1000);
+    }
+}
+
+void *disk_service_thread(void *arg){
+    printf("diskservice thread\n");
+    while(1){
+        posix_sleep_ms(1000);
+    }
+}
+void *monitor_thread(void *arg){
+    printf("monitor thread\n");
+    while(1){
+        posix_sleep_ms(1000);
+    }
+}
+void *camera_service_thread(void *arg){
+    printf("camera thread\n");
+    while(1){
+        posix_sleep_ms(1000);
+    }
 }
 
 int system_server()
@@ -74,10 +107,28 @@ int system_server()
         exit(1);
     }
 
+    // thread 구현
+    pthread_t th_watchDog, th_diskService, th_monitor, th_camera;
+    int th_res_code;
+    
+    if((th_res_code = pthread_create(&th_watchDog , NULL , watchdog_thread, NULL)) == -1)
+        perror("input.c th_command\n");
+    if((th_res_code = pthread_create(&th_diskService , NULL , disk_service_thread, NULL)) == -1)
+        perror("input.c th_sensor\n");
+    if((th_res_code = pthread_create(&th_monitor , NULL , monitor_thread, NULL)) == -1)
+        perror("input.c th_command\n");
+    if((th_res_code = pthread_create(&th_camera , NULL , camera_service_thread, NULL)) == -1)
+        perror("input.c th_sensor\n");
+
 
     while (1) {
         sleep(1);
     }
+
+    pthread_detach(th_watchDog);
+    pthread_detach(th_diskService);
+    pthread_detach(th_monitor);
+    pthread_detach(th_camera);
 
     return 0;
 }
