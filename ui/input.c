@@ -19,6 +19,8 @@
 
 #define TOY_TOK_BUFSIZE 64
 #define TOY_TOK_DELIM " \t\r\n\a"
+#define TOY_BUFFSIZE 1024
+
 
 typedef struct _sig_ucontext {
     unsigned long uc_flags;
@@ -27,6 +29,10 @@ typedef struct _sig_ucontext {
     struct sigcontext uc_mcontext;
     sigset_t uc_sigmask;
 } sig_ucontext_t;
+
+static pthread_mutex_t global_message_mutex  = PTHREAD_MUTEX_INITIALIZER;
+// global_message <~ 모든 문제를 만드는 전역 변수
+static char global_message[TOY_BUFFSIZE];
 
 void segfault_handler(int sig_num, siginfo_t * info, void * ucontext) {
   void * array[50];
@@ -68,11 +74,24 @@ void segfault_handler(int sig_num, siginfo_t * info, void * ucontext) {
  */
 void *sensor_thread(void* arg)
 {
+    char saved_message[TOY_BUFFSIZE];
     char *s = arg;
+    int i = 0;
 
     printf("%s", s);
 
     while (1) {
+        i = 0;
+        // 여기서 뮤텍스
+        // 과제를 억지로 만들기 위해 한 글자씩 출력 후 슬립
+        pthread_mutex_lock(&global_message_mutex);
+        while (global_message[i] != NULL) {
+            printf("%c", global_message[i]);
+            fflush(stdout);
+            posix_sleep_ms(500);
+            i++;
+        }
+        pthread_mutex_unlock(&global_message_mutex);
         posix_sleep_ms(5000);
     }
 
@@ -84,17 +103,20 @@ void *sensor_thread(void* arg)
  */
 
 int toy_send(char **args);
+int toy_mutex(char **args);
 int toy_shell(char **args);
 int toy_exit(char **args);
 
 char *builtin_str[] = {
     "send",
+    "mu",
     "sh",
     "exit"
 };
 
 int (*builtin_func[]) (char **) = {
     &toy_send,
+    &toy_mutex,
     &toy_shell,
     &toy_exit
 };
@@ -110,6 +132,21 @@ int toy_send(char **args)
 
     return 1;
 }
+
+int toy_mutex(char **args)
+{
+    if (args[1] == NULL) {
+        return 1;
+    }
+
+    printf("save message: %s\n", args[1]);
+    // 여기서 뮤텍스
+    pthread_mutex_lock(&global_message_mutex);
+    strcpy(global_message, args[1]);
+    pthread_mutex_unlock(&global_message_mutex);
+    return 1;
+}
+
 
 int toy_exit(char **args)
 {
@@ -213,7 +250,10 @@ void toy_loop(void)
     int status;
 
     do {
+        // 여기는 그냥 중간에 "TOY>"가 출력되는거 보기 싫어서.. 뮤텍스
+        pthread_mutex_lock(&global_message_mutex);
         printf("TOY>");
+        pthread_mutex_unlock(&global_message_mutex);
         line = toy_read_line();
         args = toy_split_line(line);
         status = toy_execute(args);
@@ -263,7 +303,7 @@ int input()
     }
     pthread_detach(command_thread_tid);
     pthread_detach(sensor_thread_tid);
-    
+
     return 0;
 }
 
